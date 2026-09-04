@@ -1,0 +1,19 @@
+# Environment files and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*firebase-adminsdk-*.json
+*service-account*.json
+*service_account*.json
+
+# Locally stored application data (do not publish user data)
+includes/*_data.json
+
+# Dependencies and local tooling
+/vendor/
+/node_modules/
+.idea/
+.vscode/
+*.log
