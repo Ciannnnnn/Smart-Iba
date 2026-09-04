@@ -1,0 +1,27 @@
+# IDE/editor files
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# PHP generated/session files
+*.session
+
+# Local configuration
+config.local.php
+
+#Json files
+*.json
+
+#impor
+firebase_config.php
+.env
