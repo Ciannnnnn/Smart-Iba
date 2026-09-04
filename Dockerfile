@@ -6,12 +6,15 @@ RUN install-php-extensions pdo_mysql
 # Copy application files
 COPY . /app
 
+# Copy Caddyfile for FrankenPHP configuration
+COPY Caddyfile /app/Caddyfile
+
 # Set working directory
 WORKDIR /app
 
 # Expose port
 EXPOSE 80
 
-# Start FrankenPHP (correct syntax - no --bind flag)
-CMD ["frankenphp", "run"]
+# Start FrankenPHP with Caddyfile
+CMD ["frankenphp", "run", "--config", "/app/Caddyfile"]
 
