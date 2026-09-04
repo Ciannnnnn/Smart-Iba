@@ -59,9 +59,18 @@ try {
     }
 } catch (Throwable $exception) {
     error_log('Admin setup error: ' . $exception->getMessage());
-    $error = $exception->getMessage() === 'An admin account already exists. Use the login page.'
-        ? $exception->getMessage()
-        : 'Admin setup is unavailable. Check the Railway database variables.';
+    $message = $exception->getMessage();
+    if ($message === 'An admin account already exists. Use the login page.') {
+        $error = $message;
+    } elseif (str_contains(strtolower($message), 'could not find driver')) {
+        $error = 'The deployed PHP image is missing the pdo_mysql extension.';
+    } elseif ($message === 'Database variables are not configured.') {
+        $error = 'DATABASE_URL is not available to this web service.';
+    } elseif (str_contains($message, 'SQLSTATE')) {
+        $error = 'The app received DATABASE_URL but could not connect to MySQL. Check its Railway service reference.';
+    } else {
+        $error = 'Admin setup is unavailable. Check the Railway deployment logs.';
+    }
 }
 ?>
 <!DOCTYPE html>
