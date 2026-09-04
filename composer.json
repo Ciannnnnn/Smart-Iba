@@ -1,0 +1,9 @@
+{
+  "name": "smart-iba/admin-panel",
+  "description": "Smart Iba admin panel",
+  "require": {
+    "php": ">=8.2",
+    "ext-pdo": "*",
+    "ext-pdo_mysql": "*"
+  }
+}
