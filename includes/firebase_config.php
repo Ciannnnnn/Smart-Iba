@@ -178,12 +178,12 @@ function cloudflare_upload_image(string $filePath, string $fileName, string $mim
     $deliveryBaseUrl = rtrim(CLOUDFLARE_IMAGE_DELIVERY_BASE_URL, '/');
     $uploadTargets = [];
     if (defined('CLOUDFLARE_IMAGE_UPLOAD_URL') && CLOUDFLARE_IMAGE_UPLOAD_URL !== '') {
-        $uploadTargets[] = [CLOUDFLARE_IMAGE_UPLOAD_URL, [], 15, true];
+        $uploadTargets[] = [CLOUDFLARE_IMAGE_UPLOAD_URL, ['Expect:'], 15, true];
     }
     if (defined('CLOUDFLARE_ACCOUNT_ID') && CLOUDFLARE_ACCOUNT_ID !== '' && defined('CLOUDFLARE_IMAGES_TOKEN') && CLOUDFLARE_IMAGES_TOKEN !== '') {
         $uploadTargets[] = [
             'https://api.cloudflare.com/client/v4/accounts/' . rawurlencode(CLOUDFLARE_ACCOUNT_ID) . '/images/v1',
-            ['Authorization: Bearer ' . CLOUDFLARE_IMAGES_TOKEN],
+            ['Authorization: Bearer ' . CLOUDFLARE_IMAGES_TOKEN, 'Expect:'],
             60,
             false,
         ];
@@ -211,7 +211,40 @@ function cloudflare_upload_image(string $filePath, string $fileName, string $mim
         $result = is_array($decoded['result'] ?? null) ? $decoded['result'] : (is_array($decoded) ? $decoded : []);
         $imageId = trim((string) ($result['id'] ?? $result['imageId'] ?? ''));
         if ($response !== false && $status >= 200 && $status < 300 && is_array($decoded) && ($decoded['success'] ?? true) === true && $imageId !== '') {
-            $returnedUrl = trim((string) ($result['url'] ?? $result['imageUrl'] ?? ''));
+            $uploadUrl = trim((string) ($result['uploadURL'] ?? $result['uploadUrl'] ?? ''));
+            if ($uploadUrl !== '') {
+                $uploadHandle = curl_init($uploadUrl);
+                curl_setopt_array($uploadHandle, [
+                    CURLOPT_POST => true,
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_HTTPHEADER => ['Expect:'],
+                    CURLOPT_POSTFIELDS => [
+                        'file' => new CURLFile($filePath, $mimeType, $fileName),
+                    ],
+                    CURLOPT_TIMEOUT => 60,
+                ]);
+                $uploadResponse = curl_exec($uploadHandle);
+                $uploadStatus = (int) curl_getinfo($uploadHandle, CURLINFO_HTTP_CODE);
+                $uploadError = curl_error($uploadHandle);
+                curl_close($uploadHandle);
+
+                if ($uploadResponse === false || $uploadStatus < 200 || $uploadStatus >= 300) {
+                    $lastError = $uploadError !== '' ? $uploadError : 'Cloudflare did not accept the image upload.';
+                    continue;
+                }
+
+                $uploadedResult = json_decode((string) $uploadResponse, true);
+                $uploadedResult = is_array($uploadedResult['result'] ?? null) ? $uploadedResult['result'] : [];
+                $uploadedImageId = trim((string) ($uploadedResult['id'] ?? ''));
+                if ($uploadedImageId === '') {
+                    $lastError = 'Cloudflare accepted the upload but did not return the final image ID.';
+                    continue;
+                }
+                $imageId = $uploadedImageId;
+                $returnedUrl = trim((string) (($uploadedResult['variants'][0] ?? '') ?: ''));
+            } else {
+                $returnedUrl = trim((string) ($result['url'] ?? $result['imageUrl'] ?? ''));
+            }
             return [
                 'id' => $imageId,
                 'url' => $returnedUrl !== ''
