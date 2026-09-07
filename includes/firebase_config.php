@@ -135,7 +135,8 @@ function cloudflare_images_enabled(): bool
     return defined('CLOUDFLARE_ACCOUNT_ID')
         && CLOUDFLARE_ACCOUNT_ID !== ''
         && defined('CLOUDFLARE_IMAGES_TOKEN')
-        && CLOUDFLARE_IMAGES_TOKEN !== '';
+        && CLOUDFLARE_IMAGES_TOKEN !== ''
+        && CLOUDFLARE_IMAGES_TOKEN !== 'PASTE_YOUR_NEW_TOKEN_HERE';
 }
 
 function cloudflare_upload_image(string $filePath, string $fileName, string $mimeType): ?array
@@ -147,6 +148,8 @@ function cloudflare_upload_image(string $filePath, string $fileName, string $mim
         }
         if (!defined('CLOUDFLARE_IMAGES_TOKEN') || CLOUDFLARE_IMAGES_TOKEN === '') {
             $missing[] = 'CLOUDFLARE_IMAGES_TOKEN';
+        } elseif (CLOUDFLARE_IMAGES_TOKEN === 'PASTE_YOUR_NEW_TOKEN_HERE') {
+            $missing[] = 'replace CLOUDFLARE_IMAGES_TOKEN placeholder';
         }
         firebase_set_last_error('Cloudflare Images is not configured. Add ' . implode(' and ', $missing) . ' to C:\\xampp\\htdocs\\Admin\\.env.');
         return null;
