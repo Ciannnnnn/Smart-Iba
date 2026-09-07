@@ -141,7 +141,14 @@ function cloudflare_images_enabled(): bool
 function cloudflare_upload_image(string $filePath, string $fileName, string $mimeType): ?array
 {
     if (!cloudflare_images_enabled()) {
-        firebase_set_last_error('Cloudflare Images is not configured.');
+        $missing = [];
+        if (!defined('CLOUDFLARE_ACCOUNT_ID') || CLOUDFLARE_ACCOUNT_ID === '') {
+            $missing[] = 'CLOUDFLARE_ACCOUNT_ID';
+        }
+        if (!defined('CLOUDFLARE_IMAGES_TOKEN') || CLOUDFLARE_IMAGES_TOKEN === '') {
+            $missing[] = 'CLOUDFLARE_IMAGES_TOKEN';
+        }
+        firebase_set_last_error('Cloudflare Images is not configured. Add ' . implode(' and ', $missing) . ' to C:\\xampp\\htdocs\\Admin\\.env.');
         return null;
     }
 
