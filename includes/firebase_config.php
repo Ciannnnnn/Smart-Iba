@@ -70,6 +70,7 @@ define('CLOUDFLARE_ACCOUNT_ID', getenv('CLOUDFLARE_ACCOUNT_ID') ?: '');
 define('CLOUDFLARE_IMAGES_TOKEN', getenv('CLOUDFLARE_IMAGES_TOKEN') ?: '');
 define('CLOUDFLARE_IMAGE_DELIVERY_BASE_URL', getenv('CLOUDFLARE_IMAGE_DELIVERY_BASE_URL') ?: 'https://imagedelivery.net/i1S0hvdaTA--NfvhEm6LLA');
 define('CLOUDFLARE_IMAGE_VARIANT', getenv('CLOUDFLARE_IMAGE_VARIANT') ?: 'public');
+define('CLOUDFLARE_IMAGE_UPLOAD_URL', getenv('CLOUDFLARE_IMAGE_UPLOAD_URL') ?: '');
 
 if (defined('APP_TIMEZONE') && APP_TIMEZONE !== '') {
     date_default_timezone_set(APP_TIMEZONE);
@@ -137,11 +138,14 @@ function firebase_fcm_enabled(): bool
 
 function cloudflare_images_enabled(): bool
 {
-    return defined('CLOUDFLARE_ACCOUNT_ID')
+    $workerConfigured = defined('CLOUDFLARE_IMAGE_UPLOAD_URL') && CLOUDFLARE_IMAGE_UPLOAD_URL !== '';
+    $directApiConfigured = defined('CLOUDFLARE_ACCOUNT_ID')
         && CLOUDFLARE_ACCOUNT_ID !== ''
         && defined('CLOUDFLARE_IMAGES_TOKEN')
         && CLOUDFLARE_IMAGES_TOKEN !== ''
         && CLOUDFLARE_IMAGES_TOKEN !== 'PASTE_YOUR_NEW_TOKEN_HERE';
+
+    return $workerConfigured || $directApiConfigured;
 }
 
 function cloudflare_upload_image(string $filePath, string $fileName, string $mimeType): ?array
@@ -170,16 +174,21 @@ function cloudflare_upload_image(string $filePath, string $fileName, string $mim
         return null;
     }
 
-    $url = 'https://api.cloudflare.com/client/v4/accounts/'
-        . rawurlencode(CLOUDFLARE_ACCOUNT_ID)
-        . '/images/v1';
+    $usingWorker = defined('CLOUDFLARE_IMAGE_UPLOAD_URL') && CLOUDFLARE_IMAGE_UPLOAD_URL !== '';
+    $url = $usingWorker
+        ? CLOUDFLARE_IMAGE_UPLOAD_URL
+        : 'https://api.cloudflare.com/client/v4/accounts/'
+            . rawurlencode(CLOUDFLARE_ACCOUNT_ID)
+            . '/images/v1';
     $handle = curl_init($url);
+    $headers = [];
+    if (!$usingWorker) {
+        $headers[] = 'Authorization: Bearer ' . CLOUDFLARE_IMAGES_TOKEN;
+    }
     curl_setopt_array($handle, [
         CURLOPT_POST => true,
         CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_HTTPHEADER => [
-            'Authorization: Bearer ' . CLOUDFLARE_IMAGES_TOKEN,
-        ],
+        CURLOPT_HTTPHEADER => $headers,
         CURLOPT_POSTFIELDS => [
             'file' => new CURLFile($filePath, $mimeType, $fileName),
         ],
@@ -193,7 +202,7 @@ function cloudflare_upload_image(string $filePath, string $fileName, string $mim
 
     $decoded = is_string($response) ? json_decode($response, true) : null;
     if ($response === false || $status < 200 || $status >= 300 || !is_array($decoded) || ($decoded['success'] ?? false) !== true) {
-        $message = $error !== '' ? $error : 'Cloudflare Images rejected the upload.';
+        $message = $error !== '' ? $error : ($usingWorker ? 'The Cloudflare Worker rejected or did not complete the upload.' : 'Cloudflare Images rejected the upload.');
         $apiErrors = is_array($decoded['errors'] ?? null) ? $decoded['errors'] : [];
         if ($apiErrors !== []) {
             $message = trim((string) ($apiErrors[0]['message'] ?? $message));
@@ -202,8 +211,9 @@ function cloudflare_upload_image(string $filePath, string $fileName, string $mim
         return null;
     }
 
-    $result = is_array($decoded['result'] ?? null) ? $decoded['result'] : [];
-    $imageId = trim((string) ($result['id'] ?? ''));
+    $result = is_array($decoded['result'] ?? null) ? $decoded['result'] : $decoded;
+    $imageId = trim((string) ($result['id'] ?? $result['imageId'] ?? ''));
+    $workerUrl = trim((string) ($result['url'] ?? $result['imageUrl'] ?? ''));
     if ($imageId === '') {
         firebase_set_last_error('Cloudflare Images did not return an image ID.');
         return null;
@@ -214,7 +224,9 @@ function cloudflare_upload_image(string $filePath, string $fileName, string $mim
 
     return [
         'id' => $imageId,
-        'url' => $deliveryBaseUrl . '/' . rawurlencode($imageId) . '/' . rawurlencode($variant !== '' ? $variant : 'public'),
+        'url' => $workerUrl !== ''
+            ? $workerUrl
+            : $deliveryBaseUrl . '/' . rawurlencode($imageId) . '/' . rawurlencode($variant !== '' ? $variant : 'public'),
     ];
 }
 
