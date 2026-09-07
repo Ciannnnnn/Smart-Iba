@@ -155,7 +155,7 @@ function users_format_datetime($value): string
 function users_status_data(array $record): array
 {
     if (users_is_banned($record)) {
-        return ['label' => 'Banned', 'class' => 'status-danger'];
+        return ['label' => 'Restricted', 'class' => 'status-danger'];
     }
 
     $lastActive = users_last_active_raw($record);
@@ -260,8 +260,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                         if ($patched) {
                             $successMessage = $isBanAction
-                                ? 'User has been banned.'
-                                : 'User has been unbanned.';
+                                ? 'User has been restricted.'
+                                : 'User restriction has been removed.';
                         } else {
                             $errorMessage = firebase_get_last_error() ?? 'The user status could not be updated.';
                         }
@@ -313,7 +313,7 @@ foreach ($records as $record) {
 
     $summary['total']++;
 
-    if ($status['label'] === 'Banned') {
+    if ($status['label'] === 'Restricted') {
         $summary['banned']++;
     } elseif ($status['label'] === 'Active now') {
         $summary['active']++;
@@ -331,7 +331,7 @@ foreach ($records as $record) {
         || ($statusFilter === 'recent' && $status['label'] === 'Recently active')
         || ($statusFilter === 'inactive' && $status['label'] === 'Offline')
         || ($statusFilter === 'unknown' && $status['label'] === 'Unknown')
-        || ($statusFilter === 'banned' && $status['label'] === 'Banned');
+        || ($statusFilter === 'banned' && $status['label'] === 'Restricted');
 
     if ($matchesSearch && $matchesStatus) {
         $users[] = $normalized;
@@ -348,8 +348,8 @@ usort(
 $rowsHtml = '';
 foreach ($users as $user) {
     $banButton = $user['is_banned']
-        ? '<button type="submit" class="action-btn secondary">Unban</button>'
-        : '<button type="submit" class="action-btn secondary">Ban</button>';
+        ? '<button type="submit" class="action-btn secondary">Unrestrict</button>'
+        : '<button type="submit" class="action-btn secondary">Restrict</button>';
     $banAction = $user['is_banned'] ? 'unban_user' : 'ban_user';
 
     $rowsHtml .= '<tr>'
@@ -396,8 +396,8 @@ if ($errorMessage !== '') {
 }
 
 $managementNote = users_manage_supported()
-    ? 'Ban, unban, or delete Firestore user profiles from this page.'
-    : 'This page is read-only right now. Switch Firebase mode to Firestore to enable ban, unban, and delete actions.';
+    ? 'Restrict, unrestrict, or delete Firestore user profiles from this page.'
+    : 'This page is read-only right now. Switch Firebase mode to Firestore to enable restrict, unrestrict, and delete actions.';
 
 $contentHtml = <<<HTML
 {$noticeHtml}
@@ -444,7 +444,7 @@ $contentHtml = <<<HTML
             <option value="active" {$activeSelected}>Active now</option>
             <option value="recent" {$recentSelected}>Recently active</option>
             <option value="inactive" {$inactiveSelected}>Offline</option>
-            <option value="banned" {$bannedSelected}>Banned</option>
+            <option value="banned" {$bannedSelected}>Restricted</option>
             <option value="unknown" {$unknownSelected}>Unknown</option>
         </select>
         <button type="submit" class="action-btn primary">Apply</button>
