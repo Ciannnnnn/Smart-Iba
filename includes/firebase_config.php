@@ -70,7 +70,7 @@ define('CLOUDFLARE_ACCOUNT_ID', getenv('CLOUDFLARE_ACCOUNT_ID') ?: '');
 define('CLOUDFLARE_IMAGES_TOKEN', getenv('CLOUDFLARE_IMAGES_TOKEN') ?: '');
 define('CLOUDFLARE_IMAGE_DELIVERY_BASE_URL', getenv('CLOUDFLARE_IMAGE_DELIVERY_BASE_URL') ?: 'https://imagedelivery.net/i1S0hvdaTA--NfvhEm6LLA');
 define('CLOUDFLARE_IMAGE_VARIANT', getenv('CLOUDFLARE_IMAGE_VARIANT') ?: 'public');
-define('CLOUDFLARE_IMAGE_UPLOAD_URL', getenv('CLOUDFLARE_IMAGE_UPLOAD_URL') ?: '');
+define('CLOUDFLARE_IMAGE_UPLOAD_URL', getenv('CLOUDFLARE_IMAGE_UPLOAD_URL') ?: 'https://long-limit-e61c.johnpogi427.workers.dev/');
 
 if (defined('APP_TIMEZONE') && APP_TIMEZONE !== '') {
     date_default_timezone_set(APP_TIMEZONE);
