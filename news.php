@@ -181,6 +181,8 @@ function normalizeNewsDoc(array $doc): array
         'title' => trim((string) ($doc['title'] ?? '')),
         'description' => trim((string) ($doc['description'] ?? $doc['content'] ?? '')),
         'date' => $doc['date'] ?? '',
+        'imageId' => trim((string) ($doc['imageId'] ?? '')),
+        'imageUrl' => trim((string) ($doc['imageUrl'] ?? '')),
         '__name' => $doc['__name'] ?? '',
     ];
 }
@@ -336,6 +338,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $description = trim((string) ($_POST['description'] ?? ''));
     $dateInput = trim((string) ($_POST['date'] ?? ''));
     $dateValue = newsDateFromInput($dateInput);
+    $uploadedImage = null;
+    $imageError = '';
+
+    if (isset($_FILES['image']) && (int) ($_FILES['image']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $imageFile = $_FILES['image'];
+        $imageSize = (int) ($imageFile['size'] ?? 0);
+        $imagePath = (string) ($imageFile['tmp_name'] ?? '');
+        $imageInfo = $imagePath !== '' && is_uploaded_file($imagePath) ? @getimagesize($imagePath) : false;
+        $allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+        if ((int) ($imageFile['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $imageError = 'The image upload failed. Please try again.';
+        } elseif ($imageSize <= 0 || $imageSize > 10 * 1024 * 1024) {
+            $imageError = 'Images must be smaller than 10 MB.';
+        } elseif ($imageInfo === false || !in_array((string) ($imageInfo['mime'] ?? ''), $allowedImageTypes, true)) {
+            $imageError = 'Please upload a valid JPG, PNG, GIF, or WebP image.';
+        } else {
+            $uploadedImage = cloudflare_upload_image(
+                $imagePath,
+                basename((string) ($imageFile['name'] ?? 'news-image')),
+                (string) $imageInfo['mime']
+            );
+            if ($uploadedImage === null) {
+                $imageError = firebase_get_last_error() ?: 'The image could not be uploaded to Cloudflare.';
+            }
+        }
+    }
 
     $flash = ['type' => 'error', 'text' => 'Unable to process the news request.'];
     $redirectDocName = '';
@@ -345,12 +374,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($title === '' || $description === '' || $dateValue === null) {
             $flash = ['type' => 'error', 'text' => 'Please complete the title, description, and date fields.'];
             $redirectDocName = $action === 'update_news' ? $docName : '';
+        } elseif ($imageError !== '') {
+            $flash = ['type' => 'error', 'text' => $imageError];
+            $redirectDocName = $action === 'update_news' ? $docName : '';
         } else {
             $payload = [
                 'title' => $title,
                 'description' => $description,
                 'date' => $dateValue,
             ];
+            if ($uploadedImage !== null) {
+                $payload['imageId'] = $uploadedImage['id'];
+                $payload['imageUrl'] = $uploadedImage['url'];
+            }
 
             if ($action === 'create_news') {
                 if (firebase_enabled() && firebase_firestore_enabled()) {
@@ -366,6 +402,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'newsTitle' => $title,
                                 'newsDate' => formatNewsDateForInput($dateValue),
                                 'newsDescription' => $description,
+                                'newsImageUrl' => $uploadedImage['url'] ?? '',
                                 'newsDocName' => (string) ($created['__name'] ?? ''),
                             ]
                         );
@@ -378,6 +415,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'news_title' => $title,
                                 'news_date' => formatNewsDateForInput($dateValue),
                                 'news_description' => $description,
+                                'news_image_url' => $uploadedImage['url'] ?? '',
                             ]
                         );
 
@@ -391,6 +429,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'title' => $title,
                         'description' => $description,
                         'date' => formatNewsDateForStorage($dateValue),
+                        'imageId' => $uploadedImage['id'] ?? '',
+                        'imageUrl' => $uploadedImage['url'] ?? '',
                     ];
 
                     if (saveNewsJsonData($dataFile, $jsonData)) {
@@ -404,6 +444,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'newsTitle' => $title,
                                 'newsDate' => formatNewsDateForInput($dateValue),
                                 'newsDescription' => $description,
+                                'newsImageUrl' => $uploadedImage['url'] ?? '',
                             ]
                         );
                         $notificationSent = sendTopicPushNotification(
@@ -415,6 +456,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'news_title' => $title,
                                 'news_date' => formatNewsDateForInput($dateValue),
                                 'news_description' => $description,
+                                'news_image_url' => $uploadedImage['url'] ?? '',
                             ]
                         );
 
@@ -446,7 +488,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'title' => $title,
                                 'description' => $description,
                                 'date' => formatNewsDateForStorage($dateValue),
-                            ]
+                            ] + ($uploadedImage !== null ? [
+                                'imageId' => $uploadedImage['id'],
+                                'imageUrl' => $uploadedImage['url'],
+                            ] : [])
                         );
 
                         $flash = saveNewsJsonData($dataFile, $jsonData)
@@ -536,7 +581,7 @@ ob_start();
 
 <h3 style="margin: 26px 0 10px;"><?php echo $isEditingNews ? 'Update News Article' : 'Create News Article'; ?></h3>
 <div class="table-wrapper" style="padding: 18px;">
-    <form method="post" style="display: grid; gap: 12px; max-width: 760px;">
+    <form method="post" enctype="multipart/form-data" style="display: grid; gap: 12px; max-width: 760px;">
         <input type="hidden" name="action" value="<?php echo $isEditingNews ? 'update_news' : 'create_news'; ?>">
         <input type="hidden" name="news_doc_name" value="<?php echo htmlspecialchars($editingItem['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
         <input type="hidden" name="filter_month" value="<?php echo htmlspecialchars($monthFilter, ENT_QUOTES, 'UTF-8'); ?>">
@@ -550,6 +595,12 @@ ob_start();
 
         <label for="news-date"><strong>Date</strong></label>
         <input id="news-date" name="date" type="date" required value="<?php echo htmlspecialchars(formatNewsDateForInput($editingItem['date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;">
+
+        <label for="news-image"><strong>Image</strong> <span class="meta-text">(optional, JPG/PNG/GIF/WebP, max 10 MB)</span></label>
+        <input id="news-image" name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+        <?php if (!empty($editingItem['imageUrl'])): ?>
+            <p class="meta-text" style="margin: 0;">Choose a new image only if you want to replace the current one.</p>
+        <?php endif; ?>
 
         <div>
             <button type="submit" class="action-btn primary"><?php echo $isEditingNews ? 'Update News' : 'Create News'; ?></button>
@@ -613,6 +664,9 @@ ob_start();
                 </div>
 
                 <p class="meta-text"><strong>Date:</strong> <?php echo htmlspecialchars(formatNewsDateForDisplay($item['date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
+                <?php if (!empty($item['imageUrl'])): ?>
+                    <img src="<?php echo htmlspecialchars($item['imageUrl'], ENT_QUOTES, 'UTF-8'); ?>" alt="" loading="lazy" style="display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin: 12px 0;">
+                <?php endif; ?>
                 <p class="meta-text"><strong>Description:</strong> <?php echo nl2br(htmlspecialchars($item['description'] ?? '-', ENT_QUOTES, 'UTF-8')); ?></p>
 
                 <div class="button-row">

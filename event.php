@@ -265,6 +265,8 @@ function normalizeEventDoc(array $doc): array
         'location' => eventFirstNonEmptyString($doc['location'] ?? '', $doc['venue'] ?? ''),
         'time' => eventFirstNonEmptyString($doc['time'] ?? '', $doc['schedule'] ?? ''),
         'date' => $doc['date'] ?? '',
+        'imageId' => trim((string) ($doc['imageId'] ?? '')),
+        'imageUrl' => trim((string) ($doc['imageUrl'] ?? '')),
         '__name' => $doc['__name'] ?? '',
     ];
 }
@@ -373,6 +375,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $time = trim((string) ($_POST['time'] ?? ''));
     $dateInput = trim((string) ($_POST['date'] ?? ''));
     $dateValue = eventDateFromInput($dateInput);
+    $uploadedImage = null;
+    $imageError = '';
+
+    if (isset($_FILES['image']) && (int) ($_FILES['image']['error'] ?? UPLOAD_ERR_NO_FILE) !== UPLOAD_ERR_NO_FILE) {
+        $imageFile = $_FILES['image'];
+        $imageSize = (int) ($imageFile['size'] ?? 0);
+        $imagePath = (string) ($imageFile['tmp_name'] ?? '');
+        $imageInfo = $imagePath !== '' && is_uploaded_file($imagePath) ? @getimagesize($imagePath) : false;
+        $allowedImageTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+
+        if ((int) ($imageFile['error'] ?? UPLOAD_ERR_OK) !== UPLOAD_ERR_OK) {
+            $imageError = 'The image upload failed. Please try again.';
+        } elseif ($imageSize <= 0 || $imageSize > 10 * 1024 * 1024) {
+            $imageError = 'Images must be smaller than 10 MB.';
+        } elseif ($imageInfo === false || !in_array((string) ($imageInfo['mime'] ?? ''), $allowedImageTypes, true)) {
+            $imageError = 'Please upload a valid JPG, PNG, GIF, or WebP image.';
+        } else {
+            $uploadedImage = cloudflare_upload_image(
+                $imagePath,
+                basename((string) ($imageFile['name'] ?? 'event-image')),
+                (string) $imageInfo['mime']
+            );
+            if ($uploadedImage === null) {
+                $imageError = firebase_get_last_error() ?: 'The image could not be uploaded to Cloudflare.';
+            }
+        }
+    }
 
     $flash = ['type' => 'error', 'text' => 'Unable to process the event request.'];
     $redirectDocName = '';
@@ -382,6 +411,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($title === '' || $location === '' || $time === '' || $dateValue === null) {
             $flash = ['type' => 'error', 'text' => 'Please complete the title, date, time, and location fields.'];
             $redirectDocName = $action === 'update_event' ? $docName : '';
+        } elseif ($imageError !== '') {
+            $flash = ['type' => 'error', 'text' => $imageError];
+            $redirectDocName = $action === 'update_event' ? $docName : '';
         } else {
             $payload = [
                 'title' => $title,
@@ -389,6 +421,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'time' => $time,
                 'location' => $location,
             ];
+            if ($uploadedImage !== null) {
+                $payload['imageId'] = $uploadedImage['id'];
+                $payload['imageUrl'] = $uploadedImage['url'];
+            }
 
             if ($action === 'create_event') {
                 if (firebase_enabled() && firebase_firestore_enabled()) {
@@ -405,6 +441,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'eventDate' => formatEventDateForInput($dateValue),
                                 'eventTime' => $time,
                                 'eventLocation' => $location,
+                                'eventImageUrl' => $uploadedImage['url'] ?? '',
                                 'eventDocName' => (string) ($created['__name'] ?? ''),
                             ]
                         );
@@ -418,6 +455,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'event_date' => formatEventDateForInput($dateValue),
                                 'event_time' => $time,
                                 'event_location' => $location,
+                                'event_image_url' => $uploadedImage['url'] ?? '',
                             ]
                         );
 
@@ -432,6 +470,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'date' => formatEventDateForStorage($dateValue),
                         'time' => $time,
                         'location' => $location,
+                        'imageId' => $uploadedImage['id'] ?? '',
+                        'imageUrl' => $uploadedImage['url'] ?? '',
                     ];
                     if (saveEventsJsonData($dataFile, $jsonData)) {
                         $notificationTitle = buildEventNotificationTitle($title);
@@ -445,6 +485,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'eventDate' => formatEventDateForInput($dateValue),
                                 'eventTime' => $time,
                                 'eventLocation' => $location,
+                                'eventImageUrl' => $uploadedImage['url'] ?? '',
                             ]
                         );
                         $notificationSent = sendTopicPushNotification(
@@ -457,6 +498,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'event_date' => formatEventDateForInput($dateValue),
                                 'event_time' => $time,
                                 'event_location' => $location,
+                                'event_image_url' => $uploadedImage['url'] ?? '',
                             ]
                         );
 
@@ -489,7 +531,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                                 'date' => formatEventDateForStorage($dateValue),
                                 'time' => $time,
                                 'location' => $location,
-                            ]
+                            ] + ($uploadedImage !== null ? [
+                                'imageId' => $uploadedImage['id'],
+                                'imageUrl' => $uploadedImage['url'],
+                            ] : [])
                         );
 
                         $flash = saveEventsJsonData($dataFile, $jsonData)
@@ -585,7 +630,7 @@ ob_start();
 
 <h3 style="margin: 26px 0 10px;"><?php echo $isEditingEvent ? 'Update Event' : 'Create Event'; ?></h3>
 <div class="table-wrapper" style="padding: 18px;">
-    <form method="post" style="display: grid; gap: 12px; max-width: 760px;">
+    <form method="post" enctype="multipart/form-data" style="display: grid; gap: 12px; max-width: 760px;">
         <input type="hidden" name="action" value="<?php echo $isEditingEvent ? 'update_event' : 'create_event'; ?>">
         <input type="hidden" name="event_doc_name" value="<?php echo htmlspecialchars($editingEvent['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
         <input type="hidden" name="filter_month" value="<?php echo htmlspecialchars($monthFilter, ENT_QUOTES, 'UTF-8'); ?>">
@@ -602,6 +647,12 @@ ob_start();
 
         <label for="event-location"><strong>Location</strong></label>
         <input id="event-location" name="location" type="text" placeholder="Enter event location" required value="<?php echo htmlspecialchars($editingEvent['location'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;">
+
+        <label for="event-image"><strong>Image</strong> <span class="meta-text">(optional, JPG/PNG/GIF/WebP, max 10 MB)</span></label>
+        <input id="event-image" name="image" type="file" accept="image/jpeg,image/png,image/gif,image/webp">
+        <?php if (!empty($editingEvent['imageUrl'])): ?>
+            <p class="meta-text" style="margin: 0;">Choose a new image only if you want to replace the current one.</p>
+        <?php endif; ?>
 
         <div>
             <button type="submit" class="action-btn primary"><?php echo $isEditingEvent ? 'Update Event' : 'Create Event'; ?></button>
@@ -667,6 +718,9 @@ ob_start();
                 </div>
 
                 <p class="meta-text"><strong>Date:</strong> <?php echo htmlspecialchars(formatEventDateForDisplay($event['date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
+                <?php if (!empty($event['imageUrl'])): ?>
+                    <img src="<?php echo htmlspecialchars($event['imageUrl'], ENT_QUOTES, 'UTF-8'); ?>" alt="" loading="lazy" style="display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin: 12px 0;">
+                <?php endif; ?>
                 <p class="meta-text"><strong>Time:</strong> <?php echo htmlspecialchars($event['time'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></p>
                 <p class="meta-text"><strong>Location:</strong> <?php echo htmlspecialchars($event['location'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></p>
 

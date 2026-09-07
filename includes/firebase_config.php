@@ -22,6 +22,10 @@ define('FIREBASE_FCM_NEWS_PUSH_TOPIC', FIREBASE_FCM_EVENTS_TOPIC);
 define('FIREBASE_FCM_ANDROID_CHANNEL_ID', 'smart_iba_urgent_v1');
 define('FIREBASE_FCM_NOTIFICATION_ICON', 'ibalogo');
 define('APP_TIMEZONE', 'Asia/Manila');
+define('CLOUDFLARE_ACCOUNT_ID', getenv('CLOUDFLARE_ACCOUNT_ID') ?: '');
+define('CLOUDFLARE_IMAGES_TOKEN', getenv('CLOUDFLARE_IMAGES_TOKEN') ?: '');
+define('CLOUDFLARE_IMAGE_DELIVERY_BASE_URL', getenv('CLOUDFLARE_IMAGE_DELIVERY_BASE_URL') ?: 'https://imagedelivery.net/i1S0hvdaTA--NfvhEm6LLA');
+define('CLOUDFLARE_IMAGE_VARIANT', getenv('CLOUDFLARE_IMAGE_VARIANT') ?: 'public');
 
 if (defined('APP_TIMEZONE') && APP_TIMEZONE !== '') {
     date_default_timezone_set(APP_TIMEZONE);
@@ -85,6 +89,79 @@ function firebase_fcm_enabled(): bool
     return firebase_enabled()
         && defined('FIREBASE_FCM_PROJECT_ID')
         && FIREBASE_FCM_PROJECT_ID !== '';
+}
+
+function cloudflare_images_enabled(): bool
+{
+    return defined('CLOUDFLARE_ACCOUNT_ID')
+        && CLOUDFLARE_ACCOUNT_ID !== ''
+        && defined('CLOUDFLARE_IMAGES_TOKEN')
+        && CLOUDFLARE_IMAGES_TOKEN !== '';
+}
+
+function cloudflare_upload_image(string $filePath, string $fileName, string $mimeType): ?array
+{
+    if (!cloudflare_images_enabled()) {
+        firebase_set_last_error('Cloudflare Images is not configured.');
+        return null;
+    }
+
+    if (!is_file($filePath) || !is_readable($filePath)) {
+        firebase_set_last_error('The uploaded image could not be read.');
+        return null;
+    }
+
+    if (!function_exists('curl_init')) {
+        firebase_set_last_error('PHP cURL is required for Cloudflare Images uploads.');
+        return null;
+    }
+
+    $url = 'https://api.cloudflare.com/client/v4/accounts/'
+        . rawurlencode(CLOUDFLARE_ACCOUNT_ID)
+        . '/images/v1';
+    $handle = curl_init($url);
+    curl_setopt_array($handle, [
+        CURLOPT_POST => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_HTTPHEADER => [
+            'Authorization: Bearer ' . CLOUDFLARE_IMAGES_TOKEN,
+        ],
+        CURLOPT_POSTFIELDS => [
+            'file' => new CURLFile($filePath, $mimeType, $fileName),
+        ],
+        CURLOPT_TIMEOUT => 60,
+    ]);
+
+    $response = curl_exec($handle);
+    $status = (int) curl_getinfo($handle, CURLINFO_HTTP_CODE);
+    $error = curl_error($handle);
+    curl_close($handle);
+
+    $decoded = is_string($response) ? json_decode($response, true) : null;
+    if ($response === false || $status < 200 || $status >= 300 || !is_array($decoded) || ($decoded['success'] ?? false) !== true) {
+        $message = $error !== '' ? $error : 'Cloudflare Images rejected the upload.';
+        $apiErrors = is_array($decoded['errors'] ?? null) ? $decoded['errors'] : [];
+        if ($apiErrors !== []) {
+            $message = trim((string) ($apiErrors[0]['message'] ?? $message));
+        }
+        firebase_set_last_error($message);
+        return null;
+    }
+
+    $result = is_array($decoded['result'] ?? null) ? $decoded['result'] : [];
+    $imageId = trim((string) ($result['id'] ?? ''));
+    if ($imageId === '') {
+        firebase_set_last_error('Cloudflare Images did not return an image ID.');
+        return null;
+    }
+
+    $variant = trim((string) CLOUDFLARE_IMAGE_VARIANT);
+    $deliveryBaseUrl = rtrim(CLOUDFLARE_IMAGE_DELIVERY_BASE_URL, '/');
+
+    return [
+        'id' => $imageId,
+        'url' => $deliveryBaseUrl . '/' . rawurlencode($imageId) . '/' . rawurlencode($variant !== '' ? $variant : 'public'),
+    ];
 }
 
 function sendPushNotification(string $userId, string $title, string $message): bool
