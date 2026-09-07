@@ -20,7 +20,12 @@ function loadApplicationEnv(string $envFile): void
         [$name, $value] = explode('=', $line, 2);
         $name = trim($name);
         $value = trim($value);
-        if ($name === '' || getenv($name) !== false) {
+        // Keep explicitly configured server variables, but let this application's
+        // .env file fill in variables that Apache/PHP exposes as empty strings.
+        // Without this, an empty inherited CLOUDFLARE_* variable prevents the
+        // valid .env value from loading.
+        $existingValue = getenv($name);
+        if ($name === '' || ($existingValue !== false && trim((string) $existingValue) !== '')) {
             continue;
         }
 
