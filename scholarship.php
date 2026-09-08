@@ -120,6 +120,7 @@ function normalizeScholarshipProgramDoc(array $doc): array
     return [
         'name' => trim((string) ($doc['name'] ?? '')),
         'requirements' => trim((string) ($doc['requirements'] ?? '')),
+        'deadline' => trim((string) ($doc['deadline'] ?? '')),
         'availableSlots' => $availableSlots,
         'totalSlots' => $totalSlots,
         'created_at' => $doc['created_at'] ?? '',
@@ -638,6 +639,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $scholarshipDocName = trim((string) ($input['scholarship_doc_name'] ?? ''));
         $name = trim((string) ($input['name'] ?? ''));
         $requirements = trim((string) ($input['requirements'] ?? ''));
+        $deadline = trim((string) ($input['deadline'] ?? ''));
         $totalSlotsRaw = trim((string) ($input['totalSlots'] ?? ''));
         $hasValidTotalSlots = $totalSlotsRaw !== '' && is_numeric($totalSlotsRaw);
         $totalSlots = $hasValidTotalSlots ? (int) $totalSlotsRaw : 0;
@@ -647,10 +649,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if (
             $name === ''
             || $requirements === ''
+            || $deadline === ''
             || !$hasValidTotalSlots
             || $totalSlots <= 0
         ) {
-            $flash = ['type' => 'error', 'text' => 'Please complete the scholarship name, requirements, and total slots.'];
+            $flash = ['type' => 'error', 'text' => 'Please complete the scholarship name, requirements, deadline, and total slots.'];
         } elseif ($action === 'update_scholarship' && $scholarshipDocName === '') {
             $flash = ['type' => 'error', 'text' => 'The selected scholarship was not found.'];
         } else {
@@ -659,6 +662,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $success = firebase_firestore_patch_document($scholarshipDocName, [
                         'name' => $name,
                         'requirements' => $requirements,
+                        'deadline' => $deadline,
                         'availableSlots' => $availableSlots,
                         'totalSlots' => $totalSlots,
                     ]);
@@ -671,6 +675,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $created = firebase_firestore_create_document('scholarships', [
                         'name' => $name,
                         'requirements' => $requirements,
+                        'deadline' => $deadline,
                         'availableSlots' => $availableSlots,
                         'totalSlots' => $totalSlots,
                         'created_at' => new DateTimeImmutable('now', firebase_app_timezone()),
@@ -691,6 +696,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     } else {
                         $jsonData['programs'][$localIndex]['name'] = $name;
                         $jsonData['programs'][$localIndex]['requirements'] = $requirements;
+                        $jsonData['programs'][$localIndex]['deadline'] = $deadline;
                         $jsonData['programs'][$localIndex]['availableSlots'] = $availableSlots;
                         $jsonData['programs'][$localIndex]['totalSlots'] = $totalSlots;
 
@@ -703,6 +709,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $jsonData['programs'][] = [
                         'name' => $name,
                         'requirements' => $requirements,
+                        'deadline' => $deadline,
                         'availableSlots' => $availableSlots,
                         'totalSlots' => $totalSlots,
                         'created_at' => firebase_now_string(),
@@ -1071,44 +1078,11 @@ if ($isAdmin) {
         </div>
     <?php endif; ?>
 
-    <div class="filter-row">
-        <form method="get" class="filter-form">
-            <label for="approved-sort">Sort approved by:</label>
-            <select id="approved-sort" name="approved_sort" onchange="this.form.submit()">
-                <?php foreach ($approvedSortOptions as $sortValue => $sortLabel): ?>
-                    <option value="<?php echo htmlspecialchars($sortValue, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $selectedApprovedSort === $sortValue ? 'selected' : ''; ?>>
-                        <?php echo htmlspecialchars($sortLabel, ENT_QUOTES, 'UTF-8'); ?>
-                    </option>
-                <?php endforeach; ?>
-            </select>
-        </form>
-    </div>
-
     <div class="stats-grid">
         <div class="stat-card">
             <h3>Scholarships</h3>
             <div class="stat-value"><?php echo count($data['programs']); ?></div>
-            <p>Scholarship entries created by the admin</p>
-        </div>
-        <div class="stat-card">
-            <h3>Pending Requests</h3>
-            <div class="stat-value"><?php echo count($data['pending']); ?></div>
-            <p>Applications waiting for review</p>
-        </div>
-        <div class="stat-card">
-            <h3>Processing</h3>
-            <div class="stat-value"><?php echo count($data['processing']); ?></div>
-            <p>Applications currently under review</p>
-        </div>
-        <div class="stat-card">
-            <h3>Approved Scholars</h3>
-            <div class="stat-value"><?php echo count($data['approved']); ?></div>
-            <p>Accepted scholarship requests</p>
-        </div>
-        <div class="stat-card">
-            <h3>Rejected</h3>
-            <div class="stat-value"><?php echo count($data['rejected']); ?></div>
-            <p>Applications finalized as rejected</p>
+            <p>Scholarship information published by the admin</p>
         </div>
     </div>
 
@@ -1123,6 +1097,9 @@ if ($isAdmin) {
 
             <label for="scholarship-requirements"><strong>Requirements</strong></label>
             <textarea id="scholarship-requirements" name="requirements" placeholder="List the scholarship requirements" required style="min-height: 120px; padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; resize: vertical;"><?php echo htmlspecialchars($editingScholarship['requirements'] ?? '', ENT_QUOTES, 'UTF-8'); ?></textarea>
+
+            <label for="scholarship-deadline"><strong>Application Deadline</strong></label>
+            <input id="scholarship-deadline" name="deadline" type="date" required value="<?php echo htmlspecialchars($editingScholarship['deadline'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;">
 
             <label for="scholarship-slots"><strong>Total Slots</strong></label>
             <input id="scholarship-slots" name="totalSlots" type="number" min="1" placeholder="Enter total number of slots" required value="<?php echo htmlspecialchars((string) ($editingScholarship['totalSlots'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;">
@@ -1139,6 +1116,7 @@ if ($isAdmin) {
         </form>
     </div>
 
+    <?php if (false): ?>
     <h3 style="margin: 26px 0 10px;">Pending Scholarship Requests</h3>
 
     <?php if (empty($data['pending'])): ?>
@@ -1339,13 +1317,16 @@ if ($isAdmin) {
         </table>
     </div>
 
-    <h3 style="margin: 26px 0 10px;">Scholarship List</h3>
+    <?php endif; ?>
+
+    <h3 style="margin: 26px 0 10px;">Scholarship Information</h3>
     <div class="table-wrapper">
         <table>
             <thead>
                 <tr>
                     <th>Name</th>
                     <th>Requirements</th>
+                    <th>Deadline</th>
                     <th>Available Slots</th>
                     <th>Total Slots</th>
                     <th>Actions</th>
@@ -1354,13 +1335,14 @@ if ($isAdmin) {
             <tbody>
                 <?php if (empty($data['programs'])): ?>
                     <tr>
-                        <td colspan="5">No scholarship entries are available.</td>
+                        <td colspan="6">No scholarship entries are available.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($data['programs'] as $program): ?>
                         <tr>
                             <td><?php echo htmlspecialchars($program['name'] ?? 'Untitled Scholarship', ENT_QUOTES, 'UTF-8'); ?></td>
                             <td><?php echo nl2br(htmlspecialchars($program['requirements'] ?? '-', ENT_QUOTES, 'UTF-8')); ?></td>
+                            <td><?php echo htmlspecialchars($program['deadline'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
                             <td><?php echo htmlspecialchars((string) getScholarshipProgramRemainingSlots($program), ENT_QUOTES, 'UTF-8'); ?></td>
                             <td><?php echo htmlspecialchars((string) ($program['totalSlots'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
                             <td>
@@ -1380,7 +1362,7 @@ if ($isAdmin) {
     <?php
     $contentHtml = ob_get_clean();
 
-    renderAdminPage('scholarship', 'Scholarship', 'Create scholarships and review scholarship applications.', $contentHtml);
+    renderAdminPage('scholarship', 'Scholarship', 'Publish scholarship information and application deadlines.', $contentHtml);
     exit;
 }
 ?>
@@ -1389,7 +1371,7 @@ if ($isAdmin) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Scholarship Request | Smart Iba</title>
+    <title>Scholarship Information | Smart Iba</title>
     <style>
         * {
             box-sizing: border-box;
@@ -1553,8 +1535,8 @@ if ($isAdmin) {
 <body>
     <div class="public-shell">
         <div class="public-hero">
-            <h1>Scholarship Request Form</h1>
-            <p>Students can submit a scholarship application here. The admin creates the scholarship list, requirements, and available slots.</p>
+            <h1>Scholarship Information</h1>
+            <p>Review scholarship opportunities, requirements, available slots, and application deadlines.</p>
             <div class="hero-actions">
                 <a href="login.php" class="hero-link primary">Admin Login</a>
                 <a href="index.php" class="hero-link secondary">Dashboard</a>
@@ -1562,6 +1544,7 @@ if ($isAdmin) {
         </div>
 
         <div class="public-grid">
+            <?php if (false): ?>
             <div class="public-card">
                 <h2>Apply for Scholarship</h2>
                 <p>Fill in your details and send your application to the admin.</p>
@@ -1603,10 +1586,11 @@ if ($isAdmin) {
                     <button type="submit" class="submit-btn">Send Scholarship Request</button>
                 </form>
             </div>
+            <?php endif; ?>
 
             <div class="public-card">
                 <h2>Available Scholarships</h2>
-                <p>Review the available scholarships, required documents, and total slots.</p>
+                <p>Review the available scholarships, required documents, available slots, and deadlines.</p>
 
                 <div class="program-item">
                     <h3>Android App API</h3>
@@ -1627,6 +1611,7 @@ if ($isAdmin) {
                             <p class="meta-text">
                                 Slots: <?php echo htmlspecialchars((string) getScholarshipProgramRemainingSlots($program), ENT_QUOTES, 'UTF-8'); ?> / <?php echo htmlspecialchars((string) ($program['totalSlots'] ?? '0'), ENT_QUOTES, 'UTF-8'); ?>
                             </p>
+                            <p class="meta-text"><strong>Deadline:</strong> <?php echo htmlspecialchars($program['deadline'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></p>
                             <div class="requirements-block">
                                 <strong>Requirements:</strong><br>
                                 <?php echo nl2br(htmlspecialchars($program['requirements'] ?? 'No requirements provided.', ENT_QUOTES, 'UTF-8')); ?>
