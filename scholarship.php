@@ -247,6 +247,65 @@ function findScholarshipProgramByName(array $programs, string $programName): ?ar
     return null;
 }
 
+function buildScholarshipNotificationTitle(string $name): string
+{
+    $name = trim($name);
+    return $name === '' ? 'New Scholarship' : 'New Scholarship: ' . $name;
+}
+
+function buildScholarshipNotificationBody(string $name, string $deadline, int $availableSlots): string
+{
+    $parts = [];
+    $name = trim($name);
+    $deadline = trim($deadline);
+
+    if ($name !== '') {
+        $parts[] = $name;
+    }
+
+    if ($deadline !== '') {
+        $parts[] = 'deadline ' . $deadline;
+    }
+
+    if ($availableSlots > 0) {
+        $parts[] = $availableSlots . ' slot' . ($availableSlots === 1 ? '' : 's') . ' available';
+    }
+
+    return $parts === [] ? 'A new scholarship opportunity has been posted.' : implode(' - ', $parts) . '.';
+}
+
+function buildScholarshipBroadcastFlashText(array $notificationResult, bool $topicPushSent): string
+{
+    $createdCount = (int) ($notificationResult['created_count'] ?? 0);
+    $failedCount = (int) ($notificationResult['failed_count'] ?? 0);
+    $userCount = count($notificationResult['user_ids'] ?? []);
+
+    if ($createdCount > 0 && $failedCount === 0 && $topicPushSent) {
+        return 'Scholarship created successfully. ' . $createdCount . ' user notification records were created and the topic push was sent.';
+    }
+
+    if ($createdCount > 0 && $failedCount === 0) {
+        return 'Scholarship created successfully. ' . $createdCount . ' user notification records were created, but the topic push could not be sent.';
+    }
+
+    if ($userCount === 0 && $topicPushSent) {
+        return 'Scholarship created successfully and the topic push was sent, but no user notification records were created because no users were found.';
+    }
+
+    if ($createdCount > 0) {
+        return 'Scholarship created successfully. ' . $createdCount . ' user notification records were created, but ' . $failedCount . ' failed and the topic push ' . ($topicPushSent ? 'was sent.' : 'could not be sent.');
+    }
+
+    if ($topicPushSent) {
+        return 'Scholarship created successfully and the topic push was sent, but the user notification records could not be created.';
+    }
+
+    $error = trim((string) (firebase_get_last_error() ?? ''));
+    return $error !== ''
+        ? 'Scholarship created successfully, but notification delivery failed. ' . $error
+        : 'Scholarship created successfully, but notification delivery failed.';
+}
+
 function deleteScholarshipRequestHistoryItem(array &$data, string $bucket, int $requestId): bool
 {
     $searchBuckets = [$bucket];
@@ -681,9 +740,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'created_at' => new DateTimeImmutable('now', firebase_app_timezone()),
                     ]);
 
-                    $flash = $created !== null
-                        ? ['type' => 'success', 'text' => 'Scholarship created successfully.']
-                        : ['type' => 'error', 'text' => 'The scholarship could not be saved. Please try again.'];
+                    if ($created !== null) {
+                        $notificationTitle = buildScholarshipNotificationTitle($name);
+                        $notificationBody = buildScholarshipNotificationBody($name, $deadline, $availableSlots);
+                        $notificationResult = firebase_create_notifications_for_all_users(
+                            $notificationTitle,
+                            'A new scholarship opportunity is now available. Deadline: ' . $deadline . '.',
+                            'scholarship',
+                            [
+                                'scholarshipName' => $name,
+                                'scholarshipDeadline' => $deadline,
+                                'scholarshipRequirements' => $requirements,
+                                'scholarshipAvailableSlots' => $availableSlots,
+                                'scholarshipTotalSlots' => $totalSlots,
+                                'scholarshipDocName' => (string) ($created['__name'] ?? ''),
+                            ]
+                        );
+                        $notificationSent = sendTopicPushNotification(
+                            FIREBASE_FCM_SCHOLARSHIPS_TOPIC,
+                            $notificationTitle,
+                            $notificationBody,
+                            [
+                                'type' => 'scholarship',
+                                'scholarship_name' => $name,
+                                'scholarship_deadline' => $deadline,
+                                'scholarship_available_slots' => (string) $availableSlots,
+                                'scholarship_total_slots' => (string) $totalSlots,
+                            ]
+                        );
+
+                        $flash = ['type' => 'success', 'text' => buildScholarshipBroadcastFlashText($notificationResult, $notificationSent)];
+                    } else {
+                        $flash = ['type' => 'error', 'text' => 'The scholarship could not be saved. Please try again.'];
+                    }
                     $shouldSyncAvailability = $created !== null;
                 }
             } else {
@@ -715,9 +804,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         'created_at' => firebase_now_string(),
                     ];
 
-                    $flash = saveScholarshipJsonData($dataFile, $jsonData)
-                        ? ['type' => 'success', 'text' => 'Scholarship created successfully.']
-                        : ['type' => 'error', 'text' => 'The scholarship could not be saved. Please try again.'];
+                    if (saveScholarshipJsonData($dataFile, $jsonData)) {
+                        $notificationTitle = buildScholarshipNotificationTitle($name);
+                        $notificationBody = buildScholarshipNotificationBody($name, $deadline, $availableSlots);
+                        $notificationResult = firebase_create_notifications_for_all_users(
+                            $notificationTitle,
+                            'A new scholarship opportunity is now available. Deadline: ' . $deadline . '.',
+                            'scholarship',
+                            [
+                                'scholarshipName' => $name,
+                                'scholarshipDeadline' => $deadline,
+                                'scholarshipRequirements' => $requirements,
+                                'scholarshipAvailableSlots' => $availableSlots,
+                                'scholarshipTotalSlots' => $totalSlots,
+                            ]
+                        );
+                        $notificationSent = sendTopicPushNotification(
+                            FIREBASE_FCM_SCHOLARSHIPS_TOPIC,
+                            $notificationTitle,
+                            $notificationBody,
+                            [
+                                'type' => 'scholarship',
+                                'scholarship_name' => $name,
+                                'scholarship_deadline' => $deadline,
+                                'scholarship_available_slots' => (string) $availableSlots,
+                                'scholarship_total_slots' => (string) $totalSlots,
+                            ]
+                        );
+
+                        $flash = ['type' => 'success', 'text' => buildScholarshipBroadcastFlashText($notificationResult, $notificationSent)];
+                    } else {
+                        $flash = ['type' => 'error', 'text' => 'The scholarship could not be saved. Please try again.'];
+                    }
                     $shouldSyncAvailability = $flash['type'] === 'success';
                 }
             }

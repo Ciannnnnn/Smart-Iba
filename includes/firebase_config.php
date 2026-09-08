@@ -63,6 +63,7 @@ define('FIREBASE_FCM_TOPIC_PREFIX', 'user_');
 define('FIREBASE_FCM_EVENTS_TOPIC', 'events');
 define('FIREBASE_FCM_NEWS_TOPIC', 'news');
 define('FIREBASE_FCM_NEWS_PUSH_TOPIC', FIREBASE_FCM_EVENTS_TOPIC);
+define('FIREBASE_FCM_SCHOLARSHIPS_TOPIC', 'scholarships');
 define('FIREBASE_FCM_ANDROID_CHANNEL_ID', 'smart_iba_urgent_v1');
 define('FIREBASE_FCM_NOTIFICATION_ICON', 'ibalogo');
 define('APP_TIMEZONE', 'Asia/Manila');
