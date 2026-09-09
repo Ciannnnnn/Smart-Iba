@@ -98,6 +98,49 @@ function splitReportRowsByState(array $reports): array
     ];
 }
 
+function filterReportRows(array $reports, string $status, string $search): array
+{
+    $filtered = [];
+    $search = strtolower($search);
+
+    foreach ($reports as $report) {
+        if ($status !== '' && normalizeReportStatus($report['status'] ?? 'Pending') !== $status) {
+            continue;
+        }
+
+        if ($search !== '') {
+            $searchable = strtolower(implode(' ', [
+                $report['reporter_name'] ?? '',
+                $report['subject'] ?? '',
+                $report['location'] ?? '',
+                $report['description'] ?? '',
+                $report['user_email'] ?? '',
+            ]));
+
+            if (strpos($searchable, $search) === false) {
+                continue;
+            }
+        }
+
+        $filtered[] = $report;
+    }
+
+    return $filtered;
+}
+
+function buildReportsRedirectUrl(string $status = '', string $search = ''): string
+{
+    $query = [];
+    if ($status !== '') {
+        $query['status'] = $status;
+    }
+    if ($search !== '') {
+        $query['search'] = $search;
+    }
+
+    return 'reports.php' . ($query !== [] ? '?' . http_build_query($query) : '');
+}
+
 $flash = $_SESSION['reports_flash'] ?? null;
 unset($_SESSION['reports_flash']);
 $reportsError = null;
@@ -136,7 +179,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 
     $_SESSION['reports_flash'] = $flash;
-    header('Location: reports.php');
+    header('Location: ' . buildReportsRedirectUrl(
+        trim((string) ($_POST['redirect_status'] ?? '')),
+        trim((string) ($_POST['redirect_search'] ?? ''))
+    ));
     exit;
 }
 
@@ -151,6 +197,13 @@ if (firebase_enabled() && firebase_firestore_enabled()) {
 } else {
     $reportsError = 'Firestore is not enabled, so reports cannot be loaded.';
 }
+
+$selectedReportStatus = trim((string) ($_GET['status'] ?? ''));
+if (!in_array($selectedReportStatus, ['', 'Pending', 'Investigating', 'Resolved', 'Rejected'], true)) {
+    $selectedReportStatus = '';
+}
+$selectedReportSearch = trim((string) ($_GET['search'] ?? ''));
+$reportRows = filterReportRows($reportRows, $selectedReportStatus, $selectedReportSearch);
 
 $summary = [
     'total' => count($reportRows),
@@ -315,6 +368,27 @@ ob_start();
     }
 </style>
 
+<div class="filter-row">
+    <form method="get" class="filter-form">
+        <label for="report-search">Search reports:</label>
+        <input type="search" id="report-search" name="search" value="<?php echo htmlspecialchars($selectedReportSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Reporter, subject, location...">
+
+        <label for="report-status-filter">Status:</label>
+        <select id="report-status-filter" name="status" onchange="this.form.submit()">
+            <option value="">All statuses</option>
+            <?php foreach (['Pending', 'Investigating', 'Resolved', 'Rejected'] as $reportStatusOption): ?>
+                <option value="<?php echo htmlspecialchars($reportStatusOption, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $selectedReportStatus === $reportStatusOption ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars($reportStatusOption, ENT_QUOTES, 'UTF-8'); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
+        <button type="submit" class="action-btn primary">Search</button>
+        <?php if ($selectedReportStatus !== '' || $selectedReportSearch !== ''): ?>
+            <a href="reports.php" class="action-btn secondary">Clear</a>
+        <?php endif; ?>
+    </form>
+</div>
+
 <h3 style="margin: 26px 0 10px;">Active Reports</h3>
 <p class="muted-text" style="margin: 0 0 10px;">Move each active report from <strong>Pending</strong> to <strong>Investigating</strong> and then to <strong>Resolved</strong>. Choosing <strong>Rejected</strong> removes the report from the list.</p>
 
@@ -365,6 +439,8 @@ ob_start();
                                 <form method="post" class="report-form-inline">
                                     <input type="hidden" name="action" value="update_report_status">
                                     <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($report['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedReportStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedReportSearch, ENT_QUOTES, 'UTF-8'); ?>">
                                     <select name="status" class="reports-select" aria-label="Update report status">
                                         <?php foreach (['Pending', 'Investigating', 'Resolved', 'Rejected'] as $statusOption): ?>
                                             <option value="<?php echo htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8'); ?>" <?php echo normalizeReportStatus($report['status'] ?? 'Pending') === $statusOption ? 'selected' : ''; ?>>
@@ -433,6 +509,8 @@ ob_start();
                                 <form method="post" class="inline-form" onsubmit="return confirm('Delete this report history entry?');">
                                     <input type="hidden" name="action" value="delete_report">
                                     <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($report['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedReportStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedReportSearch, ENT_QUOTES, 'UTF-8'); ?>">
                                     <button type="submit" class="action-btn report-delete-btn">Delete</button>
                                 </form>
                             </div>

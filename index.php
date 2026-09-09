@@ -129,45 +129,6 @@ function loadDashboardEventCount(string $dataFile, array $collections): int
     return loadJsonCount($dataFile, 'events');
 }
 
-function normalizeDashboardScholarshipStatus($status): string
-{
-    $normalized = strtolower(trim((string) $status));
-
-    return match ($normalized) {
-        '', 'pending' => 'pending',
-        default => $normalized,
-    };
-}
-
-function loadDashboardScholarshipPendingCount(string $dataFile, array $collections): int
-{
-    if (firebase_enabled() && firebase_firestore_enabled()) {
-        $count = 0;
-        $loaded = false;
-
-        foreach ($collections as $collection) {
-            $documents = firebase_firestore_list_documents($collection);
-            if (!is_array($documents)) {
-                continue;
-            }
-
-            $loaded = true;
-            foreach ($documents as $document) {
-                $status = normalizeDashboardScholarshipStatus($document['status'] ?? '');
-                if ($status === 'pending') {
-                    $count++;
-                }
-            }
-        }
-
-        if ($loaded) {
-            return $count;
-        }
-    }
-
-    return loadJsonCount($dataFile, 'pending');
-}
-
 function loadUserCount(): int
 {
     if (firebase_enabled()) {
@@ -181,9 +142,10 @@ $manageRequestCount = loadDashboardManageRequestCount(
     __DIR__ . '/includes/manage_requests_data.json',
     ['service_requests', 'manage_requests']
 );
-$scholarshipPendingCount = loadDashboardScholarshipPendingCount(
+$scholarshipAvailableCount = loadCollectionCount(
+    'scholarships',
     __DIR__ . '/includes/scholarship_requests_data.json',
-    ['scholarship_submissions', 'scholarship_requests']
+    'programs'
 );
 $officeDirectoryCount = loadOfficeDirectoryCount(__DIR__ . '/includes/office_directory_data.json', ['office', 'office_directory']);
 $eventCount = loadDashboardEventCount(__DIR__ . '/includes/events_data.json', ['events', 'event']);
@@ -212,8 +174,8 @@ ob_start();
     </div>
     <div class="stat-card">
         <h3>Scholarship</h3>
-        <div class="stat-value"><?php echo $scholarshipPendingCount; ?></div>
-        <p>Pending scholarship requests</p>
+        <div class="stat-value"><?php echo $scholarshipAvailableCount; ?></div>
+        <p>Scholarship programs available</p>
     </div>
     <div class="stat-card">
         <h3>Office Directory</h3>

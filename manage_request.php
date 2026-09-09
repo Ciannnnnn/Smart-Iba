@@ -139,12 +139,8 @@ function getNextManageRequestId(array $data): int
 function getManageRequestCategories(array $data): array
 {
     $knownServices = [
-        'Barangay Clearance',
-        'Certificate of Indigency',
-        'Business Permit',
-        'Community Tax Certificate',
-        'Certificate of Recidence',
-        'Certificate of No Marriage',
+        'PWD Registry',
+        'Social Welfare',
     ];
 
     $categories = array_combine($knownServices, $knownServices);
@@ -162,18 +158,36 @@ function getManageRequestCategories(array $data): array
     return $categories;
 }
 
-function filterManageRequestDataByCategory(array $data, string $category): array
+function filterManageRequestData(array $data, string $category, string $status, string $search): array
 {
-    if ($category === '') {
+    if ($category === '' && $status === '' && $search === '') {
         return $data;
     }
 
     $filtered = getManageRequestEmptyData();
+    $search = strtolower($search);
     foreach (getManageRequestBuckets() as $bucket) {
         foreach ($data[$bucket] as $item) {
-            if (strcasecmp(getManageRequestServiceName((array) $item), $category) === 0) {
-                $filtered[$bucket][] = $item;
+            $request = (array) $item;
+            if ($category !== '' && strcasecmp(getManageRequestServiceName($request), $category) !== 0) {
+                continue;
             }
+            if ($status !== '' && normalizeManageRequestStatus($request['status'] ?? '') !== $status) {
+                continue;
+            }
+            if ($search !== '') {
+                $searchable = strtolower(implode(' ', [
+                    getManageRequestServiceName($request),
+                    $request['requested_by'] ?? '',
+                    $request['contact'] ?? '',
+                    $request['title'] ?? '',
+                    $request['content'] ?? '',
+                ]));
+                if (strpos($searchable, $search) === false) {
+                    continue;
+                }
+            }
+            $filtered[$bucket][] = $item;
         }
     }
 
@@ -225,7 +239,7 @@ function sortManageRequestApprovedItems(array $requests, string $sort): array
     return $requests;
 }
 
-function buildManageRequestRedirectUrl(string $category = '', string $approvedSort = 'recent'): string
+function buildManageRequestRedirectUrl(string $category = '', string $approvedSort = 'recent', string $status = '', string $search = ''): string
 {
     $query = [];
 
@@ -235,6 +249,12 @@ function buildManageRequestRedirectUrl(string $category = '', string $approvedSo
 
     if ($approvedSort !== '' && $approvedSort !== 'recent') {
         $query['approved_sort'] = $approvedSort;
+    }
+    if ($status !== '') {
+        $query['status'] = $status;
+    }
+    if ($search !== '') {
+        $query['search'] = $search;
     }
 
     return 'manage_request.php' . ($query !== [] ? '?' . http_build_query($query) : '');
@@ -635,11 +655,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $_SESSION['manage_request_flash'] = $flash;
     $redirectCategory = trim((string) ($_POST['redirect_category'] ?? ''));
     $redirectApprovedSort = trim((string) ($_POST['redirect_approved_sort'] ?? 'recent'));
-    header('Location: ' . buildManageRequestRedirectUrl($redirectCategory, $redirectApprovedSort));
+    $redirectStatus = trim((string) ($_POST['redirect_status'] ?? ''));
+    $redirectSearch = trim((string) ($_POST['redirect_search'] ?? ''));
+    header('Location: ' . buildManageRequestRedirectUrl($redirectCategory, $redirectApprovedSort, $redirectStatus, $redirectSearch));
     exit;
 }
 
 $selectedCategory = trim($_GET['category'] ?? '');
+$selectedStatus = trim((string) ($_GET['status'] ?? ''));
+if (!in_array($selectedStatus, ['', 'Pending', 'Processing', 'Completed', 'Rejected', 'Cancelled'], true)) {
+    $selectedStatus = '';
+}
+$selectedSearch = trim((string) ($_GET['search'] ?? ''));
 $approvedSortOptions = getManageRequestApprovedSortOptions();
 $selectedApprovedSort = trim((string) ($_GET['approved_sort'] ?? 'recent'));
 if (!isset($approvedSortOptions[$selectedApprovedSort])) {
@@ -649,7 +676,9 @@ if (!isset($approvedSortOptions[$selectedApprovedSort])) {
 $data = loadManageRequestData($dataFile);
 $allCategories = getManageRequestCategories($data);
 if ($selectedCategory !== '') {
-    $data = filterManageRequestDataByCategory($data, $selectedCategory);
+    $data = filterManageRequestData($data, $selectedCategory, $selectedStatus, $selectedSearch);
+} elseif ($selectedStatus !== '' || $selectedSearch !== '') {
+    $data = filterManageRequestData($data, '', $selectedStatus, $selectedSearch);
 }
 if ($isAdmin) {
     $data['completed'] = sortManageRequestApprovedItems($data['completed'], $selectedApprovedSort);
@@ -713,6 +742,23 @@ if ($isAdmin) {
                 <?php endforeach; ?>
             </select>
 
+            <label for="request-status-filter">Status:</label>
+            <select id="request-status-filter" name="status" onchange="this.form.submit()">
+                <option value="">All statuses</option>
+                <?php foreach (['Pending', 'Processing', 'Completed', 'Rejected', 'Cancelled'] as $statusOption): ?>
+                    <option value="<?php echo htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $selectedStatus === $statusOption ? 'selected' : ''; ?>>
+                        <?php echo htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8'); ?>
+                    </option>
+                <?php endforeach; ?>
+            </select>
+
+            <label for="request-search">Search requests:</label>
+            <input type="search" id="request-search" name="search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>" placeholder="Service, requester, contact...">
+            <button type="submit" class="action-btn primary">Search</button>
+            <?php if ($selectedCategory !== '' || $selectedStatus !== '' || $selectedSearch !== ''): ?>
+                <a href="manage_request.php" class="action-btn secondary">Clear</a>
+            <?php endif; ?>
+
             <label for="approved-sort">Sort completed by:</label>
             <select id="approved-sort" name="approved_sort" onchange="this.form.submit()">
                 <?php foreach ($approvedSortOptions as $sortValue => $sortLabel): ?>
@@ -758,6 +804,8 @@ if ($isAdmin) {
                             <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($request['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                             <button type="submit" class="action-btn primary">Start Processing</button>
                         </form>
                         <form method="post" class="inline-form">
@@ -766,6 +814,8 @@ if ($isAdmin) {
                             <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($request['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                             <button type="submit" class="action-btn secondary">Reject</button>
                         </form>
                     </div>
@@ -807,6 +857,8 @@ if ($isAdmin) {
                             <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($request['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                             <button type="submit" class="action-btn primary">Complete</button>
                         </form>
                         <form method="post" class="inline-form">
@@ -815,6 +867,8 @@ if ($isAdmin) {
                             <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($request['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                             <button type="submit" class="action-btn secondary">Reject</button>
                         </form>
                         <form method="post" class="inline-form">
@@ -823,6 +877,8 @@ if ($isAdmin) {
                             <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($request['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                             <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                            <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                             <button type="submit" class="action-btn secondary">Cancel</button>
                         </form>
                     </div>
@@ -863,6 +919,8 @@ if ($isAdmin) {
                                     <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($post['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                                     <button type="submit" class="action-btn secondary">Delete</button>
                                 </form>
                             </td>
@@ -905,6 +963,8 @@ if ($isAdmin) {
                                     <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($post['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                                     <button type="submit" class="action-btn secondary">Delete</button>
                                 </form>
                             </td>
@@ -947,6 +1007,8 @@ if ($isAdmin) {
                                     <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($post['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_category" value="<?php echo htmlspecialchars($selectedCategory, ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_approved_sort" value="<?php echo htmlspecialchars($selectedApprovedSort, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedStatus, ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedSearch, ENT_QUOTES, 'UTF-8'); ?>">
                                     <button type="submit" class="action-btn secondary">Delete</button>
                                 </form>
                             </td>
