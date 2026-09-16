@@ -77,6 +77,7 @@ function normalizeManageRequestDoc(array $doc): array
         'service_name' => $serviceName,
         'category' => $serviceName,
         'content' => $doc['content'] ?? $doc['purpose'] ?? '',
+        'quantity' => $doc['quantity'] ?? '',
         'requested_by' => $doc['requested_by'] ?? $doc['userName'] ?? $doc['fullName'] ?? $doc['requester_name'] ?? 'Unknown User',
         'contact' => $doc['contact'] ?? $doc['mobileNumber'] ?? $doc['phoneNumber'] ?? $doc['userEmail'] ?? $doc['requester_contact'] ?? '',
         'source' => $doc['source'] ?? 'User Request',
@@ -794,6 +795,7 @@ if ($isAdmin) {
 
                     <div class="request-meta-row">
                         <span><strong>Service:</strong> <?php echo htmlspecialchars(getManageRequestServiceName($request), ENT_QUOTES, 'UTF-8'); ?></span>
+                        <span><strong>Quantity:</strong> <?php echo htmlspecialchars((string) (($request['quantity'] ?? '') !== '' ? $request['quantity'] : 'Not provided'), ENT_QUOTES, 'UTF-8'); ?></span>
                         <span><strong>Contact:</strong> <?php echo htmlspecialchars($request['contact'] ?? 'Not provided', ENT_QUOTES, 'UTF-8'); ?></span>
                     </div>
 
@@ -847,6 +849,7 @@ if ($isAdmin) {
 
                     <div class="request-meta-row">
                         <span><strong>Service:</strong> <?php echo htmlspecialchars(getManageRequestServiceName($request), ENT_QUOTES, 'UTF-8'); ?></span>
+                        <span><strong>Quantity:</strong> <?php echo htmlspecialchars((string) (($request['quantity'] ?? '') !== '' ? $request['quantity'] : 'Not provided'), ENT_QUOTES, 'UTF-8'); ?></span>
                         <span><strong>Contact:</strong> <?php echo htmlspecialchars($request['contact'] ?? 'Not provided', ENT_QUOTES, 'UTF-8'); ?></span>
                     </div>
 

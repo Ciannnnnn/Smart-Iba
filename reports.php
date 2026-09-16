@@ -39,6 +39,7 @@ function normalizeReportDoc(array $doc): array
         'subject' => trim((string) ($doc['subject'] ?? 'No Subject')),
         'location' => trim((string) ($doc['location'] ?? 'No Location')),
         'description' => trim((string) ($doc['description'] ?? '')),
+        'image_url' => trim((string) ($doc['imageUrl'] ?? '')),
         'status' => normalizeReportStatus($doc['status'] ?? 'Pending'),
         'timestamp' => (string) ($doc['timestamp'] ?? ''),
         'user_email' => trim((string) ($doc['userEmail'] ?? '')),
@@ -366,6 +367,21 @@ ob_start();
         border: 1px solid #dbeafe;
         white-space: pre-wrap;
     }
+
+    .report-image {
+        display: block;
+        width: min(100%, 560px);
+        max-height: 360px;
+        object-fit: contain;
+        border: 1px solid #dbeafe;
+        border-radius: 12px;
+        background: #f8fbff;
+    }
+
+    .report-image-link {
+        display: inline-block;
+        margin-top: 8px;
+    }
 </style>
 
 <div class="filter-row">
@@ -432,6 +448,7 @@ ob_start();
                                     data-location="<?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-email="<?php echo htmlspecialchars($report['user_email'] ?: 'No email provided', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-description="<?php echo htmlspecialchars($report['description'] ?: 'No description provided.', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-image-url="<?php echo htmlspecialchars($report['image_url'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                 >
                                     View Details
                                 </button>
@@ -502,6 +519,7 @@ ob_start();
                                     data-location="<?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-email="<?php echo htmlspecialchars($report['user_email'] ?: 'No email provided', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-description="<?php echo htmlspecialchars($report['description'] ?: 'No description provided.', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-image-url="<?php echo htmlspecialchars($report['image_url'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
                                 >
                                     View Details
                                 </button>
@@ -540,6 +558,12 @@ ob_start();
                 <p><strong>Description</strong></p>
                 <div class="modal-description" id="report-modal-description">-</div>
             </div>
+            <div>
+                <p><strong>Evidence Image</strong></p>
+                <img id="report-modal-image" class="report-image" alt="Report evidence image" hidden>
+                <a id="report-modal-image-link" class="report-image-link" target="_blank" rel="noopener noreferrer" hidden>Open full image</a>
+                <p id="report-modal-no-image" class="meta-text">No image provided.</p>
+            </div>
         </div>
     </div>
 </div>
@@ -553,6 +577,9 @@ ob_start();
         const locationEl = document.getElementById('report-modal-location');
         const emailEl = document.getElementById('report-modal-email');
         const descriptionEl = document.getElementById('report-modal-description');
+        const imageEl = document.getElementById('report-modal-image');
+        const imageLinkEl = document.getElementById('report-modal-image-link');
+        const noImageEl = document.getElementById('report-modal-no-image');
         const metaEl = document.getElementById('report-modal-meta');
 
         function closeModal() {
@@ -567,6 +594,17 @@ ob_start();
                 locationEl.textContent = button.dataset.location || '-';
                 emailEl.textContent = button.dataset.email || '-';
                 descriptionEl.textContent = button.dataset.description || '-';
+                const imageUrl = button.dataset.imageUrl || '';
+                imageEl.hidden = imageUrl === '';
+                imageLinkEl.hidden = imageUrl === '';
+                noImageEl.hidden = imageUrl !== '';
+                if (imageUrl !== '') {
+                    imageEl.src = imageUrl;
+                    imageLinkEl.href = imageUrl;
+                } else {
+                    imageEl.removeAttribute('src');
+                    imageLinkEl.removeAttribute('href');
+                }
                 metaEl.textContent = (button.dataset.subject || 'Report') + ' from ' + (button.dataset.reporter || 'Unknown Reporter');
                 modal.classList.add('open');
                 modal.setAttribute('aria-hidden', 'false');
