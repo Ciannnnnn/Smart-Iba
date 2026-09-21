@@ -371,6 +371,7 @@ function renderAdminPage(string $currentPage, string $pageTitle, string $pageDes
                 display: flex;
                 align-items: center;
                 gap: 10px;
+                flex-wrap: wrap;
             }
 
             .filter-form label {
@@ -430,6 +431,68 @@ function renderAdminPage(string $currentPage, string $pageTitle, string $pageDes
                 grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
                 gap: 16px;
                 margin: 0 0 18px;
+            }
+
+            @media (max-width: 768px) {
+                .filter-row {
+                    justify-content: stretch;
+                }
+
+                .filter-form {
+                    width: 100%;
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+
+                .filter-form label,
+                .filter-form input,
+                .filter-form select,
+                .filter-form button,
+                .filter-form a {
+                    width: 100%;
+                }
+
+                .filter-form .input-field {
+                    min-width: 0;
+                }
+
+                .report-actions,
+                .report-form-inline {
+                    width: 100%;
+                    flex-direction: column;
+                    align-items: stretch;
+                }
+
+                .reports-select,
+                .report-form-inline .action-btn,
+                .report-form-inline select,
+                .report-actions .action-btn,
+                .report-actions button {
+                    width: 100%;
+                }
+
+                .table-wrapper {
+                    overflow-x: auto;
+                    -webkit-overflow-scrolling: touch;
+                }
+
+                table {
+                    min-width: 520px;
+                }
+            }
+
+            @media (max-width: 480px) {
+                .summary-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .page-content {
+                    padding: 12px 10px 18px;
+                }
+
+                table {
+                    min-width: 480px;
+                }
             }
 
             .summary-card {

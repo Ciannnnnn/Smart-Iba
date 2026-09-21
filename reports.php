@@ -142,6 +142,34 @@ function buildReportsRedirectUrl(string $status = '', string $search = ''): stri
     return 'reports.php' . ($query !== [] ? '?' . http_build_query($query) : '');
 }
 
+function buildReportNotificationForStatus(string $status): array
+{
+    $status = normalizeReportStatus($status);
+
+    return match ($status) {
+        'Pending' => [
+            'title' => 'Report Pending',
+            'message' => 'Your report is still pending review. We will update you once it has been reviewed.',
+        ],
+        'Investigating' => [
+            'title' => 'Report Under Investigation',
+            'message' => 'Your report is now under investigation. We will provide another update as soon as we have more information.',
+        ],
+        'Resolved' => [
+            'title' => 'Report Resolved',
+            'message' => 'Your report has been resolved. Thank you for reporting this concern.',
+        ],
+        'Rejected' => [
+            'title' => 'Report Rejected',
+            'message' => 'Your report was reviewed and rejected. If you believe this is a mistake, please contact the office for clarification.',
+        ],
+        default => [
+            'title' => 'Report Updated',
+            'message' => 'Your report status has been updated.',
+        ],
+    };
+}
+
 $flash = $_SESSION['reports_flash'] ?? null;
 unset($_SESSION['reports_flash']);
 $reportsError = null;
@@ -167,12 +195,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif (!in_array($status, $allowedStatuses, true)) {
             $flash = ['type' => 'error', 'text' => 'The selected report could not be updated.'];
         } elseif ($status === 'Rejected') {
+            $reporterUserId = trim((string) ($_POST['user_id'] ?? ''));
+            $notification = buildReportNotificationForStatus($status);
             $success = firebase_firestore_delete_document($docName);
+            if ($success && $reporterUserId !== '') {
+                firebase_create_notification($reporterUserId, $notification['title'], $notification['message']);
+            }
             $flash = $success
                 ? ['type' => 'success', 'text' => 'The report was rejected and deleted successfully.']
                 : ['type' => 'error', 'text' => firebase_get_last_error() ?? 'The report could not be rejected.'];
         } else {
+            $reporterUserId = trim((string) ($_POST['user_id'] ?? ''));
             $success = firebase_firestore_patch_document($docName, ['status' => $status]);
+            if ($success && $reporterUserId !== '') {
+                $notification = buildReportNotificationForStatus($status);
+                firebase_create_notification($reporterUserId, $notification['title'], $notification['message']);
+            }
             $flash = $success
                 ? ['type' => 'success', 'text' => 'The report status was updated successfully.']
                 : ['type' => 'error', 'text' => firebase_get_last_error() ?? 'The report status could not be updated.'];
@@ -456,6 +494,7 @@ ob_start();
                                 <form method="post" class="report-form-inline">
                                     <input type="hidden" name="action" value="update_report_status">
                                     <input type="hidden" name="doc_name" value="<?php echo htmlspecialchars($report['__name'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
+                                    <input type="hidden" name="user_id" value="<?php echo htmlspecialchars((string) ($report['user_id'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_status" value="<?php echo htmlspecialchars($selectedReportStatus, ENT_QUOTES, 'UTF-8'); ?>">
                                     <input type="hidden" name="redirect_search" value="<?php echo htmlspecialchars($selectedReportSearch, ENT_QUOTES, 'UTF-8'); ?>">
                                     <select name="status" class="reports-select" aria-label="Update report status">
