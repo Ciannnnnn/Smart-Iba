@@ -1221,9 +1221,6 @@ if ($isAdmin) {
 
             <label for="scholarship-slots"><strong>Total Slots</strong></label>
             <input id="scholarship-slots" name="totalSlots" type="number" min="1" placeholder="Enter total number of slots" required value="<?php echo htmlspecialchars((string) ($editingScholarship['totalSlots'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;">
-            <p class="meta-text" style="margin: -4px 0 0;">
-                Available slots are calculated automatically: total slots minus approved requests.
-            </p>
 
             <div>
                 <button type="submit" class="action-btn primary"><?php echo $isEditingScholarship ? 'Update Scholarship' : 'Create Scholarship'; ?></button>
@@ -1445,7 +1442,6 @@ if ($isAdmin) {
                     <th>Name</th>
                     <th>Requirements</th>
                     <th>Deadline</th>
-                    <th>Available Slots</th>
                     <th>Total Slots</th>
                     <th>Actions</th>
                 </tr>
@@ -1453,7 +1449,7 @@ if ($isAdmin) {
             <tbody>
                 <?php if (empty($data['programs'])): ?>
                     <tr>
-                        <td colspan="6">No scholarship entries are available.</td>
+                        <td colspan="5">No scholarship entries are available.</td>
                     </tr>
                 <?php else: ?>
                     <?php foreach ($data['programs'] as $program): ?>
@@ -1461,7 +1457,6 @@ if ($isAdmin) {
                             <td><?php echo htmlspecialchars($program['name'] ?? 'Untitled Scholarship', ENT_QUOTES, 'UTF-8'); ?></td>
                             <td><?php echo nl2br(htmlspecialchars($program['requirements'] ?? '-', ENT_QUOTES, 'UTF-8')); ?></td>
                             <td><?php echo htmlspecialchars($program['deadline'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></td>
-                            <td><?php echo htmlspecialchars((string) getScholarshipProgramRemainingSlots($program), ENT_QUOTES, 'UTF-8'); ?></td>
                             <td><?php echo htmlspecialchars((string) ($program['totalSlots'] ?? '-'), ENT_QUOTES, 'UTF-8'); ?></td>
                             <td>
                                 <a href="scholarship.php?edit_scholarship=<?php echo urlencode((string) ($program['__name'] ?? '')); ?>" class="action-btn primary" style="display: inline-block; text-decoration: none;">Edit</a>
@@ -1654,7 +1649,7 @@ if ($isAdmin) {
     <div class="public-shell">
         <div class="public-hero">
             <h1>Scholarship Information</h1>
-            <p>Review scholarship opportunities, requirements, available slots, and application deadlines.</p>
+            <p>Review scholarship opportunities, requirements, and application deadlines.</p>
             <div class="hero-actions">
                 <a href="login.php" class="hero-link primary">Admin Login</a>
                 <a href="index.php" class="hero-link secondary">Dashboard</a>
@@ -1708,7 +1703,7 @@ if ($isAdmin) {
 
             <div class="public-card">
                 <h2>Available Scholarships</h2>
-                <p>Review the available scholarships, required documents, available slots, and deadlines.</p>
+                <p>Review the available scholarships, required documents, and deadlines.</p>
 
                 <div class="program-item">
                     <h3>Android App API</h3>
@@ -1726,9 +1721,6 @@ if ($isAdmin) {
                     <?php foreach ($data['programs'] as $program): ?>
                         <div class="program-item">
                             <h3><?php echo htmlspecialchars($program['name'] ?? 'Untitled Scholarship', ENT_QUOTES, 'UTF-8'); ?></h3>
-                            <p class="meta-text">
-                                Slots: <?php echo htmlspecialchars((string) getScholarshipProgramRemainingSlots($program), ENT_QUOTES, 'UTF-8'); ?> / <?php echo htmlspecialchars((string) ($program['totalSlots'] ?? '0'), ENT_QUOTES, 'UTF-8'); ?>
-                            </p>
                             <p class="meta-text"><strong>Deadline:</strong> <?php echo htmlspecialchars($program['deadline'] ?? '-', ENT_QUOTES, 'UTF-8'); ?></p>
                             <div class="requirements-block">
                                 <strong>Requirements:</strong><br>
