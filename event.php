@@ -216,6 +216,28 @@ function getEventMonthOptions(): array
     ];
 }
 
+function getEventCategoryOptions(): array
+{
+    return [
+        'Fiesta',
+        'Festival',
+        'Community Event',
+        'Religious Event',
+        'Cultural Event',
+        'Sports Event',
+        'Educational Event',
+        'Government Event',
+        'Health Event',
+        'Other',
+    ];
+}
+
+function normalizeEventCategory($value): string
+{
+    $category = trim((string) $value);
+    return in_array($category, getEventCategoryOptions(), true) ? $category : '';
+}
+
 function getEventYearOptions(array $events): array
 {
     $years = [];
@@ -262,6 +284,7 @@ function normalizeEventDoc(array $doc): array
 {
     return [
         'title' => eventFirstNonEmptyString($doc['title'] ?? '', $doc['name'] ?? ''),
+        'category' => trim((string) ($doc['category'] ?? '')),
         'location' => eventFirstNonEmptyString($doc['location'] ?? '', $doc['venue'] ?? ''),
         'time' => eventFirstNonEmptyString($doc['time'] ?? '', $doc['schedule'] ?? ''),
         'date' => $doc['date'] ?? '',
@@ -371,6 +394,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $monthFilter = normalizeEventMonthFilter($_POST['filter_month'] ?? '');
     $yearFilter = normalizeEventYearFilter($_POST['filter_year'] ?? '');
     $title = trim((string) ($_POST['title'] ?? ''));
+    $category = normalizeEventCategory($_POST['category'] ?? '');
     $location = trim((string) ($_POST['location'] ?? ''));
     $time = trim((string) ($_POST['time'] ?? ''));
     $dateInput = trim((string) ($_POST['date'] ?? ''));
@@ -408,8 +432,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $events = loadEventEntries($dataFile, $eventCollection);
 
     if ($action === 'create_event' || $action === 'update_event') {
-        if ($title === '' || $location === '' || $time === '' || $dateValue === null) {
-            $flash = ['type' => 'error', 'text' => 'Please complete the title, date, time, and location fields.'];
+        if ($title === '' || $category === '' || $location === '' || $time === '' || $dateValue === null) {
+            $flash = ['type' => 'error', 'text' => 'Please complete the title, category, date, time, and location fields.'];
             $redirectDocName = $action === 'update_event' ? $docName : '';
         } elseif ($imageError !== '') {
             $flash = ['type' => 'error', 'text' => $imageError];
@@ -417,6 +441,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } else {
             $payload = [
                 'title' => $title,
+                'category' => $category,
                 'date' => $dateValue,
                 'time' => $time,
                 'location' => $location,
@@ -438,6 +463,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'event',
                             [
                                 'eventTitle' => $title,
+                                'eventCategory' => $category,
                                 'eventDate' => formatEventDateForInput($dateValue),
                                 'eventTime' => $time,
                                 'eventLocation' => $location,
@@ -452,6 +478,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             [
                                 'type' => 'event',
                                 'event_title' => $title,
+                                'event_category' => $category,
                                 'event_date' => formatEventDateForInput($dateValue),
                                 'event_time' => $time,
                                 'event_location' => $location,
@@ -467,6 +494,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $jsonData = loadEventsJsonData($dataFile);
                     $jsonData['events'][] = [
                         'title' => $title,
+                        'category' => $category,
                         'date' => formatEventDateForStorage($dateValue),
                         'time' => $time,
                         'location' => $location,
@@ -482,6 +510,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             'event',
                             [
                                 'eventTitle' => $title,
+                                'eventCategory' => $category,
                                 'eventDate' => formatEventDateForInput($dateValue),
                                 'eventTime' => $time,
                                 'eventLocation' => $location,
@@ -495,6 +524,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             [
                                 'type' => 'event',
                                 'event_title' => $title,
+                                'event_category' => $category,
                                 'event_date' => formatEventDateForInput($dateValue),
                                 'event_time' => $time,
                                 'event_location' => $location,
@@ -528,6 +558,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             (array) $jsonData['events'][$localIndex],
                             [
                                 'title' => $title,
+                                'category' => $category,
                                 'date' => formatEventDateForStorage($dateValue),
                                 'time' => $time,
                                 'location' => $location,
@@ -585,6 +616,7 @@ $yearFilter = normalizeEventYearFilter($_GET['filter_year'] ?? '');
 $editingDocName = trim((string) ($_GET['edit_event'] ?? ''));
 $editingEvent = $editingDocName !== '' ? findEventByDocName($events, $editingDocName) : null;
 $isEditingEvent = is_array($editingEvent);
+$categoryOptions = getEventCategoryOptions();
 $monthOptions = getEventMonthOptions();
 $yearOptions = getEventYearOptions($events);
 $filteredEvents = filterEventEntries($events, $monthFilter, $yearFilter);
@@ -638,6 +670,16 @@ ob_start();
 
         <label for="event-title"><strong>Title</strong></label>
         <input id="event-title" name="title" type="text" placeholder="Enter event title" required value="<?php echo htmlspecialchars($editingEvent['title'] ?? '', ENT_QUOTES, 'UTF-8'); ?>" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;">
+
+        <label for="event-category"><strong>Category</strong></label>
+        <select id="event-category" name="category" required style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px; background: #fff;">
+            <option value="">Select event category</option>
+            <?php foreach ($categoryOptions as $categoryOption): ?>
+                <option value="<?php echo htmlspecialchars($categoryOption, ENT_QUOTES, 'UTF-8'); ?>" <?php echo ($editingEvent['category'] ?? '') === $categoryOption ? 'selected' : ''; ?>>
+                    <?php echo htmlspecialchars($categoryOption, ENT_QUOTES, 'UTF-8'); ?>
+                </option>
+            <?php endforeach; ?>
+        </select>
 
         <label for="event-date"><strong>Date</strong></label>
         <input id="event-date" name="date" type="date" required value="<?php echo htmlspecialchars(formatEventDateForInput($editingEvent['date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>" style="padding: 10px 12px; border: 1px solid #cbd5e1; border-radius: 10px;">
@@ -718,6 +760,7 @@ ob_start();
                 </div>
 
                 <p class="meta-text"><strong>Date:</strong> <?php echo htmlspecialchars(formatEventDateForDisplay($event['date'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></p>
+                <p class="meta-text"><strong>Category:</strong> <?php echo htmlspecialchars($event['category'] !== '' ? $event['category'] : 'Uncategorized', ENT_QUOTES, 'UTF-8'); ?></p>
                 <?php if (!empty($event['imageUrl'])): ?>
                     <img src="<?php echo htmlspecialchars($event['imageUrl'], ENT_QUOTES, 'UTF-8'); ?>" alt="" loading="lazy" style="display: block; width: 100%; max-height: 220px; object-fit: cover; border-radius: 10px; margin: 12px 0;">
                 <?php endif; ?>
