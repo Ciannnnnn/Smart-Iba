@@ -219,7 +219,6 @@ function getEventMonthOptions(): array
 function getEventCategoryOptions(): array
 {
     return [
-        'Fiesta',
         'Festival',
         'Community Event',
         'Religious Event',
