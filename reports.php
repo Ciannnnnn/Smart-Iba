@@ -63,6 +63,18 @@ function formatReportDate(?string $value): string
     }
 }
 
+function buildGoogleMapsSearchUrl(string $location): string
+{
+    $location = trim($location);
+
+    if ($location === '' || $location === 'No Location' || $location === '-') {
+        return '';
+    }
+
+    // Google Maps accepts both a place name and coordinates such as "14.5995, 120.9842".
+    return 'https://www.google.com/maps/search/?api=1&query=' . rawurlencode($location);
+}
+
 function sortReportsNewestFirst(array $reports): array
 {
     usort($reports, static function (array $a, array $b): int {
@@ -420,6 +432,13 @@ ob_start();
         display: inline-block;
         margin-top: 8px;
     }
+
+    .maps-link {
+        color: #1d4ed8;
+        font-weight: 600;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
 </style>
 
 <div class="filter-row">
@@ -470,7 +489,16 @@ ob_start();
                         <td><?php echo htmlspecialchars(formatReportDate($report['timestamp'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars($report['reporter_name'] ?: 'Unknown Reporter', ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars($report['subject'] ?: 'No Subject', ENT_QUOTES, 'UTF-8'); ?></td>
-                        <td><?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td>
+                            <?php $mapsUrl = buildGoogleMapsSearchUrl($report['location'] ?? ''); ?>
+                            <?php if ($mapsUrl !== ''): ?>
+                                <a class="maps-link" href="<?php echo htmlspecialchars($mapsUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
+                                    <?php echo htmlspecialchars($report['location'], ENT_QUOTES, 'UTF-8'); ?>
+                                </a>
+                            <?php else: ?>
+                                <?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <span class="status-pill <?php echo htmlspecialchars($statusMeta['class'], ENT_QUOTES, 'UTF-8'); ?>">
                                 <?php echo htmlspecialchars($statusMeta['label'], ENT_QUOTES, 'UTF-8'); ?>
@@ -484,6 +512,7 @@ ob_start();
                                     data-reporter="<?php echo htmlspecialchars($report['reporter_name'] ?: 'Unknown Reporter', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-subject="<?php echo htmlspecialchars($report['subject'] ?: 'No Subject', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-location="<?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-map-url="<?php echo htmlspecialchars(buildGoogleMapsSearchUrl($report['location'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                                     data-email="<?php echo htmlspecialchars($report['user_email'] ?: 'No email provided', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-description="<?php echo htmlspecialchars($report['description'] ?: 'No description provided.', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-image-url="<?php echo htmlspecialchars($report['image_url'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -542,7 +571,16 @@ ob_start();
                         <td><?php echo htmlspecialchars(formatReportDate($report['timestamp'] ?? ''), ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars($report['reporter_name'] ?: 'Unknown Reporter', ENT_QUOTES, 'UTF-8'); ?></td>
                         <td><?php echo htmlspecialchars($report['subject'] ?: 'No Subject', ENT_QUOTES, 'UTF-8'); ?></td>
-                        <td><?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?></td>
+                        <td>
+                            <?php $mapsUrl = buildGoogleMapsSearchUrl($report['location'] ?? ''); ?>
+                            <?php if ($mapsUrl !== ''): ?>
+                                <a class="maps-link" href="<?php echo htmlspecialchars($mapsUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener noreferrer" title="Open in Google Maps">
+                                    <?php echo htmlspecialchars($report['location'], ENT_QUOTES, 'UTF-8'); ?>
+                                </a>
+                            <?php else: ?>
+                                <?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?>
+                            <?php endif; ?>
+                        </td>
                         <td>
                             <span class="status-pill <?php echo htmlspecialchars($statusMeta['class'], ENT_QUOTES, 'UTF-8'); ?>">
                                 <?php echo htmlspecialchars($statusMeta['label'], ENT_QUOTES, 'UTF-8'); ?>
@@ -556,6 +594,7 @@ ob_start();
                                     data-reporter="<?php echo htmlspecialchars($report['reporter_name'] ?: 'Unknown Reporter', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-subject="<?php echo htmlspecialchars($report['subject'] ?: 'No Subject', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-location="<?php echo htmlspecialchars($report['location'] ?: 'No Location', ENT_QUOTES, 'UTF-8'); ?>"
+                                    data-map-url="<?php echo htmlspecialchars(buildGoogleMapsSearchUrl($report['location'] ?? ''), ENT_QUOTES, 'UTF-8'); ?>"
                                     data-email="<?php echo htmlspecialchars($report['user_email'] ?: 'No email provided', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-description="<?php echo htmlspecialchars($report['description'] ?: 'No description provided.', ENT_QUOTES, 'UTF-8'); ?>"
                                     data-image-url="<?php echo htmlspecialchars($report['image_url'] ?? '', ENT_QUOTES, 'UTF-8'); ?>"
@@ -591,7 +630,7 @@ ob_start();
         <div class="modal-body">
             <p><strong>Reporter:</strong> <span id="report-modal-reporter">-</span></p>
             <p><strong>Subject:</strong> <span id="report-modal-subject">-</span></p>
-            <p><strong>Location:</strong> <span id="report-modal-location">-</span></p>
+            <p><strong>Location:</strong> <a id="report-modal-location" class="maps-link" href="#" target="_blank" rel="noopener noreferrer" hidden></a><span id="report-modal-location-empty">-</span></p>
             <p><strong>User Email:</strong> <span id="report-modal-email">-</span></p>
             <div>
                 <p><strong>Description</strong></p>
@@ -614,6 +653,7 @@ ob_start();
         const reporterEl = document.getElementById('report-modal-reporter');
         const subjectEl = document.getElementById('report-modal-subject');
         const locationEl = document.getElementById('report-modal-location');
+        const locationEmptyEl = document.getElementById('report-modal-location-empty');
         const emailEl = document.getElementById('report-modal-email');
         const descriptionEl = document.getElementById('report-modal-description');
         const imageEl = document.getElementById('report-modal-image');
@@ -630,7 +670,13 @@ ob_start();
             button.addEventListener('click', () => {
                 reporterEl.textContent = button.dataset.reporter || '-';
                 subjectEl.textContent = button.dataset.subject || '-';
-                locationEl.textContent = button.dataset.location || '-';
+                const location = button.dataset.location || '-';
+                const mapsUrl = button.dataset.mapUrl || '';
+                locationEl.textContent = location;
+                locationEl.href = mapsUrl || '#';
+                locationEl.hidden = mapsUrl === '';
+                locationEmptyEl.textContent = mapsUrl === '' ? location : '';
+                locationEmptyEl.hidden = mapsUrl !== '';
                 emailEl.textContent = button.dataset.email || '-';
                 descriptionEl.textContent = button.dataset.description || '-';
                 const imageUrl = button.dataset.imageUrl || '';
